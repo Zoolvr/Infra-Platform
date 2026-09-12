@@ -1,40 +1,41 @@
-name: Terraform CI
+nom : Terraform CI
 
-on:
-  push:
-    branches: [main]
-    paths:
-      - 'terraform/**'
-  pull_request:
-    branches: [main]
-    paths:
-      - 'terraform/**'
+sur:
+pousser:
+branches : [principale]
+chemins :
+- 'terraform/**'
+demande de fusion :
+branches : [principale]
+chemins :
+- 'terraform/**'
+workflow_dispatch :
 
-jobs:
-  terraform:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: terraform
+emplois :
+terraformer :
+fonctionne sous : ubuntu-latest
+valeurs par défaut :
+courir:
+répertoire de travail : terraform
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+mesures:
+- nom : Code de paiement
+utilisations : actions/checkout@v4
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+- nom : Configuration de Terraform
+utilise : hashicorp/setup-terraform@v3
 
-      - name: Terraform Format Check
-        run: terraform fmt -check
+- nom : Vérification du format Terraform
+exécuter : terraform fmt -check
 
-      - name: Terraform Init
-        run: terraform init
+- nom : Initialisation Terraform
+Exécuter : initialisation de Terraform
 
-      - name: Terraform Validate
-        run: terraform validate
+- nom : Validation Terraform
+Exécuter : terraform validate
 
-      - name: Terraform Plan
-        run: terraform plan
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+- Nom : Plan Terraform
+exécuter : plan Terraform
+environnement :
+AWS_ACCESS_KEY_ID : ${{ secrets.AWS_ACCESS_KEY_ID }}
+AWS_SECRET_ACCESS_KEY : ${{ secrets.AWS_SECRET_ACCESS_KEY }}
