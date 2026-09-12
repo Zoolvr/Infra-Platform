@@ -25,6 +25,11 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
+      - name: Write SSH public key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PUBLIC_KEY }}" > ~/.ssh/idp-key.pub
+
       - name: Terraform Format Check
         run: terraform fmt -check
 
