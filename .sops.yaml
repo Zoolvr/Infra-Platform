@@ -1,0 +1,3 @@
+creation_rules:
+  - path_regex: gitops[\\/]secrets[\\/].*\.yaml$
+    age: age1xkml9mahqjh8cvpcqpaw3r3y8wsg3kxx58tsa2thjm47hptlgflsnkmpll
