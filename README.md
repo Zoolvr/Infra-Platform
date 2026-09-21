@@ -1,268 +1,129 @@
-# Infra-Platform — Internal Developer Platform sur AWS
+# Infra-Platform
 
+Plateforme Kubernetes sur AWS, montée entièrement en code. Voici
+comment je l'ai construite, dans l'ordre.
 
+## Pourquoi
 
-Plateforme Kubernetes end-to-end, entièrement pilotée en code : provisioning d'infrastructure, pipeline CI/CD, déploiement continu GitOps, gestion sécurisée des secrets et monitoring.
+Je connaissais Terraform et le CI/CD en théorie, jamais en pratique.
+J'ai monté ce projet pour changer ça, avec un vrai use case du début à
+la fin plutôt qu'un tuto isolé.
 
+## Le réseau AWS
 
+J'ai commencé par le réseau, parce que rien ne peut exister sans lui.
+Avec Terraform :
+- un VPC (le réseau privé)
+- un subnet public dedans
+- une internet gateway pour sortir sur le net
+- une table de routage pour relier les deux
 
-**Contexte**
+Tout ça écrit dans `main.tf`, jamais cliqué dans la console AWS.
 
+## Le pare-feu et la connexion
 
+Ensuite, un security group qui n'ouvre que deux ports : 22 (SSH) et
+6443 (l'API Kubernetes). Et une paire de clés SSH générée en local,
+dont seule la clé publique part sur AWS.
 
-Projet personnel réalisé pour combler des compétences concrètes en Infrastructure as Code, CI/CD et GitOps, dans le cadre d'une recherche de poste DevOps/Infrastructure junior en alternance. L'objectif : reproduire, à petite échelle, les pratiques utilisées en entreprise pour automatiser de bout en bout la création et l'exploitation d'une infrastructure.
+## La machine et Kubernetes
 
+Une instance EC2, avec un script qui s'exécute tout seul au premier
+démarrage pour installer k3s (une version légère de Kubernetes). Je
+n'ai jamais eu besoin de me connecter pour taper la commande
+d'installation moi-même.
 
+## Le pipeline
 
-Aucune action n'est faite manuellement sur les serveurs : tout part d'un `git push`.
+Une fois l'infra qui marchait à la main, j'ai automatisé sa
+vérification. Un fichier GitHub Actions qui, à chaque push sur le
+dossier `terraform/`, vérifie le format du code, sa syntaxe, et
+affiche ce qui va changer avant que quoi que ce soit ne soit appliqué.
+L'apply reste manuel, volontairement — je ne voulais pas qu'une erreur
+modifie l'infra toute seule.
 
+## Piloter à distance
 
+Au début je me connectais en SSH pour tout faire sur le cluster, ce
+qui n'avait pas de sens pour un projet censé tout automatiser. J'ai
+récupéré le fichier de connexion généré par k3s, changé l'adresse
+dedans, et depuis j'utilise `kubectl` en local. Le SSH ne sert plus
+qu'à ouvrir un accès temporaire aux interfaces web.
 
-**Architecture**
+## ArgoCD
 
+Installé dans le cluster, il surveille un dossier du repo (`gitops/`)
+et redéploie automatiquement tout ce qui y change. Testé en supprimant
+des pods à la main : recréés en quelques secondes, sans que je fasse
+rien.
 
+## Les secrets
+
+Chiffrés avec SOPS avant d'être commités. Une clé publique sert à
+chiffrer, une clé privée (gardée en local, jamais sur GitHub) sert à
+déchiffrer. Le fichier reste lisible dans sa structure, seules les
+valeurs deviennent illisibles.
+
+## Le monitoring
+
+Prometheus et Grafana installés avec Helm en une commande. Accès via
+le même principe de tunnel SSH que pour ArgoCD, pour voir l'usage
+CPU/RAM du cluster en direct.
+
+## Le script Python
+
+Un petit outil qui regroupe plusieurs commandes `kubectl` en une
+seule, pour vérifier l'état de la plateforme sans avoir à taper trois
+commandes différentes à chaque fois.
+
+## Ce que je garderais différent en vrai
+
+- Le SSH est ouvert à tout le monde (`0.0.0.0/0`), à restreindre en usage réel
+- Le certificat de l'API Kubernetes ne connaît pas l'IP publique, d'où
+un `insecure-skip-tls-verify` que je devrais corriger proprement
+- Le déchiffrement des secrets est manuel, un opérateur dédié le
+ferait automatiquement en prod
+- Une seule instance, pas de haute dispo — suffisant pour apprendre,
+pas pour tenir en prod
+
+## Structure du repo
 
 ```
-
-GitHub Repo
-
-&#x20;  │
-
-&#x20;  ├── Push sur terraform/ ──► GitHub Actions (lint, validate, plan)
-
-&#x20;  │
-
-&#x20;  ├── terraform apply ──► AWS (VPC, subnet, security group, EC2)
-
-&#x20;  │                                   │
-
-&#x20;  │                                   ▼
-
-&#x20;  │                        Instance EC2 (k3s)
-
-&#x20;  │                                   │
-
-&#x20;  │                    ┌──────────────┼──────────────┐
-
-&#x20;  │                    ▼              ▼              ▼
-
-&#x20;  │                 ArgoCD      Prometheus/      Application
-
-&#x20;  │              (GitOps)        Grafana          démo
-
-&#x20;  │                    ▲
-
-&#x20;  └── Push sur gitops/ ┘  (sync automatique)
-
+terraform/          code d'infra AWS
+.github/workflows/   pipeline CI
+gitops/               ce qu'ArgoCD déploie
+scripts/              outillage Python
+docs/                  captures d'écran
 ```
 
-
-
-\##Stack technique
-
-
-
-| Brique | Outil | Rôle |
-
-|---|---|---|
-
-| Infrastructure as Code | \*\*Terraform\*\* | Provisioning du VPC, subnet, sécurité, instance EC2 sur AWS |
-
-| Orchestration | \*\*k3s\*\* | Distribution Kubernetes légère, adaptée aux ressources limitées |
-
-| CI/CD | \*\*GitHub Actions\*\* | Lint, validation et plan Terraform automatiques à chaque push |
-
-| Déploiement continu | \*\*ArgoCD\*\* | GitOps — le repo Git est la source de vérité du cluster |
-
-| Secrets | \*\*SOPS + age\*\* | Chiffrement des secrets avant commit, jamais de clé en clair sur GitHub |
-
-| Observabilité | \*\*Prometheus + Grafana\*\* (kube-prometheus-stack) | Monitoring temps réel du cluster |
-
-| Scripting | \*\*Python\*\* | Outil custom de vérification de l'état de la plateforme |
-
-
-
-\## Structure du repo
-
-
-
-```
-
-Infra-Platform/
-
-├── terraform/              # Code d'infrastructure AWS
-
-│   └── main.tf
-
-├── .github/workflows/       # Pipeline CI/CD
-
-│   └── terraform.yml
-
-├── gitops/                  # Manifests Kubernetes surveillés par ArgoCD
-
-│   ├── deployment.yaml
-
-│   └── secrets/
-
-│       └── demo-secret.yaml  # Chiffré avec SOPS
-
-├── scripts/                  # Outillage
-
-│   └── healthcheck.py
-
-├── docs/
-
-├── .sops.yaml                # Configuration du chiffrement des secrets
-
-├── .gitignore
-
-└── README.md
-
-```
-
-
-
-\## Comment reproduire ce projet
-
-
-
-\### Prérequis
-
-\- Compte AWS avec un utilisateur IAM dédié (accès programmatique uniquement)
-
-\- Terraform, AWS CLI, kubectl, Helm, SOPS + age installés en local
-
-
-
-\### 1. Provisionner l'infrastructure
+## Pour reproduire
 
 ```bash
-
 aws configure
-
 cd terraform
-
 terraform init
-
 terraform apply
-
 ```
 
-Crée le VPC, le subnet public, le security group, la paire de clés SSH et l'instance EC2 avec k3s installé automatiquement au démarrage (via `user\_data`).
-
-
-
-\### 2. Configurer l'accès au cluster
-
-Récupérer le kubeconfig généré sur l'instance (`/etc/rancher/k3s/k3s.yaml`), l'adapter avec l'IP publique de l'instance, et l'utiliser en local pour piloter le cluster à distance avec `kubectl` — sans jamais avoir besoin de SSH pour les opérations Kubernetes.
-
-
-
-\### 3. Installer ArgoCD
+Récupérer le kubeconfig sur l'instance (`/etc/rancher/k3s/k3s.yaml`),
+changer l'IP dedans, puis piloter en local avec `kubectl`.
 
 ```bash
-
 kubectl create namespace argocd
-
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-
+kubectl apply -n argocd -f
+https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 ```
 
-Créer ensuite une Application ArgoCD pointant vers le dossier `gitops/` de ce repo, en synchronisation automatique.
-
-
-
-\### 4. Installer le monitoring
-
 ```bash
-
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-
+helm repo add prometheus-community
+https://prometheus-community.github.io/helm-charts
 kubectl create namespace monitoring
-
-helm install monitoring prometheus-community/kube-prometheus-stack --namespace monitoring
-
+helm install monitoring prometheus-community/kube-prometheus-stack
+--namespace monitoring
 ```
-
-
-
-\### 5. Gérer les secrets
 
 ```bash
-
-age-keygen -o keys.txt   # génère une paire de clés
-
-sops -e -i gitops/secrets/mon-secret.yaml   # chiffre avant de commit
-
+sops -e -i gitops/secrets/mon-secret.yaml
 ```
 
-
-
-\## Preuves visuelles
-
-
-
-\*(voir dossier `docs/` — captures d'écran)\*
-
-
-
-\- Pipeline CI/CD GitHub Actions en succès (lint, validate, plan Terraform automatiques)
-
-\- Application `demo-app` `Healthy`/`Synced` dans ArgoCD, avec l'arbre de ressources déployées
-
-\- Auto-réparation GitOps : suppression manuelle des pods, recréation automatique en quelques secondes
-
-\- Secret Kubernetes chiffré avec SOPS (illisible sans la clé privée)
-
-\- Dashboard Grafana affichant l'utilisation CPU/mémoire du cluster en temps réel
-
-\- Liste des ressources Terraform gérées (`terraform state list`)
-
-\- Structure organisée du repo
-
-
-
-\## Choix techniques et compromis
-
-
-
-\- \*\*k3s plutôt qu'EKS\*\* : EKS facture le control plane (\~73 €/mois) même à l'arrêt des workloads. k3s auto-hébergé sur une simple instance EC2 reste quasi-gratuit sous Free Tier, tout en étant une vraie distribution Kubernetes conforme (CNCF certified).
-
-\- \*\*SOPS + age plutôt que Vault\*\* : Vault nécessite un serveur dédié à faire tourner et administrer en plus du reste. SOPS chiffre directement les fichiers versionnés, sans infrastructure supplémentaire — plus adapté à un projet à cette échelle.
-
-\- \*\*`terraform destroy` entre les sessions de travail\*\* : pour limiter les coûts, l'infrastructure n'est pas maintenue en permanence. Chaque session de travail commence par un `terraform apply` et se termine par un `terraform destroy`.
-
-
-
-\## Limites connues (points d'amélioration identifiés)
-
-
-
-\- Le security group autorise le SSH (port 22) depuis `0.0.0.0/0` — à restreindre à une IP spécifique en conditions réelles.
-
-\- Le certificat TLS de l'API Kubernetes n'inclut pas l'IP publique dans ses SAN (`--tls-san` non configuré à l'installation de k3s), nécessitant `insecure-skip-tls-verify` côté client — à corriger pour un usage en production.
-
-\- Le déchiffrement des secrets SOPS est manuel ; en production, un opérateur dédié (SOPS Operator, ou intégration ArgoCD/Vault) automatiserait le déchiffrement au moment du déploiement.
-
-\- Instance unique (pas de haute disponibilité) — cohérent avec un objectif d'apprentissage, pas un environnement de production.
-
-
-
-\## Ce que ce projet démontre
-
-
-
-\- Infrastructure as Code de bout en bout (Terraform)
-
-\- Automatisation CI/CD (GitHub Actions)
-
-\- GitOps et déploiement continu (ArgoCD)
-
-\- Gestion sécurisée des secrets (SOPS/age)
-
-\- Observabilité (Prometheus/Grafana)
-
-\- Scripting d'automatisation (Python)
-
-\- Rigueur sur la maîtrise des coûts cloud (Free Tier, destroy systématique)
-
+## En images
