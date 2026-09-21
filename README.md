@@ -127,3 +127,24 @@ sops -e -i gitops/secrets/mon-secret.yaml
 ```
 
 ## En images
+
+### Infrastructure AWS avec Terraform
+![Infrastructure AWS avec Terraform](terraform.png)
+
+### Déploiement avec ArgoCD
+![ArgoCD](argo1.png)
+
+### Synchronisation GitOps avec ArgoCD
+![ArgoCD Sync](argo2.png)
+
+### Monitoring avec Grafana
+![Grafana](graphana.png)
+
+### Pilotage du cluster avec kubectl
+![kubectl](kubectl.png)
+
+### Gestion des secrets avec SOPS
+![Secrets SOPS](secret.png)
+
+### Structure et sources du projet
+![Sources du projet](source.png)
